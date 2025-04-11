@@ -60,13 +60,13 @@ def naver_news_scraper(query, date, category):
 
             if time_delta_minutes is not None and time_delta_minutes <= 3:
                 news_list.append({
-                    "title": title,
-                    "언론사": press,
-                    "summary": description,
-                    "url": link,
-                    "네이버링크": naver_link,
-                    "분류": category,
+                    "category": category,
                     "keyword": query,
+                    "title": title,
+                    "press": press,
+                    "description" : description,
+                    "url": link,
+                    "naver_link": naver_link,
                     "time": time_elem
                 })
     finally:
