@@ -1,6 +1,7 @@
-# /Users/samsung/Documents/hackathon/NaverNewsCrawler/newsbot/naver_scraper.py
+# news_list_scraper2.py
 
 import os
+import sys
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -12,14 +13,22 @@ from urllib.parse import quote
 
 def web_driver():
     options = Options()
-    options.add_argument("--headless")
-    service = Service(ChromeDriverManager().install())
+    options.add_argument('--headless=new')  # 최신 버전용!
+
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1920,1080')
+    options.add_argument('--remote-debugging-port=9222')  # crash 방지용
+
+    service = Service(ChromeDriverManager(driver_version="129.0.6668.59").install())
+
     driver = webdriver.Chrome(service=service, options=options)
     return driver
 
 def build_naver_news_url(query, date):
     encoded_query = quote(query)
-    option_date = f"ds={date[:4]}.{date[4:6]}.{date[-2:]}&de={date[:4]}.{date[4:6]}.{date[-2:]}"
+    option_date = f"ds={str(int(date[:4]))}.{date[4:6]}.{date[-2:]}&de={date[:4]}.{date[4:6]}.{date[-2:]}"
     url = f"https://search.naver.com/search.naver?where=news&query={encoded_query}&sm=tab_opt&sort=0&photo=0&field=0&pd=3&{option_date}"
     print(url)
     return url
@@ -70,32 +79,60 @@ def naver_news_scraper(query, date, category):
 
     return news_list
 
-def save_to_excel(all_news_list, date):
+def save_to_excel(file_prefix, all_news_list, date, use_health):
     if all_news_list:
-        data_directory = "data/"
+        data_directory = "../data/"
         if not os.path.exists(data_directory):
             os.makedirs(data_directory)
         df = pd.DataFrame(all_news_list)
-        filename = f"{data_directory}네이버뉴스_전체_{date}.xlsx"
+        if use_health:
+            desired_press = ['조선일보', '중앙일보','동아일보','한국경제','매일경제']
+            df = df[df['언론사'].isin(desired_press)]
+        filename = f"{data_directory}{file_prefix}_{date}.xlsx"
         df.to_excel(filename, index=False)
         print(f"뉴스 데이터가 {filename} 파일로 저장되었습니다.")
 
 if __name__ == "__main__":
-    date = '20250409'
-    keywords = {
-        "당사": ["삼성생명", "홍원학"],
-        "보험": ["생명보험", "손해보험", "생보", "손보", "보험사기",
-                "실손", "무해지", "저해지", "IFRS17", "킥스",
-                "삼성화재", "한화생명", "교보생명", "신한라이프"],
-        "그룹": ["이재용", "홍라희", "이부진", "이서현", "삼성전자", "삼성물산"],
-        "금융": ["금융위", "금감원", "김병환", "이복현", "금융지주"]
-    }
+    if len(sys.argv) > 1:
+        date = sys.argv[1]
+    else:
+        date = '20250410'  # 기본 날짜
+
+    # 사용할 키워드 세트를 선택
+    if len(sys.argv) > 2:
+        use_health_keywords = True if sys.argv[2]=='health' else False
+    else:
+        use_health_keywords = False #True 
+
+    if use_health_keywords:
+        selected_keywords = {
+            "질병/건강": [
+                "당뇨", "고혈압", "치매", "암", "심장", "뇌졸중",
+                "갑상선", "위암", "유방암", "대상포진",
+                "골다공증", "간경화", "폐렴"
+            ],
+            "예방/생활습관": ["건강검진", "예방접종", "운동", "식습관",
+                "금연", "절주", "생활습관병", "스트레스", "수면"],
+            "노령화/고령층": ["노인", "고령자", "노후", "시니어", "60대", "70대", "요양병원",
+"장기요양", "간병"]
+        }
+        file_prefix = "건강"
+    else:
+        selected_keywords = {
+            "당사": ["삼성생명", "홍원학"],
+            "보험": ["생명보험", "손해보험", "생보", "손보", "보험사기",
+                    "실손", "무해지", "저해지", "IFRS17", "킥스",
+                    "삼성화재", "한화생명", "교보생명", "신한라이프"],
+            "그룹": ["이재용", "홍라희", "이부진", "이서현", "삼성전자", "삼성물산"],
+            "금융": ["금융위", "금감원", "김병환", "이복현", "금융지주"]
+        }
+        file_prefix = "회사"
 
     all_news_list = []
 
-    for category, keyword_list in keywords.items():
+    for category, keyword_list in selected_keywords.items():
         for query in keyword_list:
             news = naver_news_scraper(query, date, category)
             all_news_list.extend(news)
 
-    save_to_excel(all_news_list, date)
+    save_to_excel(file_prefix, all_news_list, date, use_health_keywords)
