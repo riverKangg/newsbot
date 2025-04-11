@@ -1,11 +1,13 @@
 import streamlit as st
+from st_aggrid import AgGrid, GridOptionsBuilder
+import plotly.express as px
 import pandas as pd
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 from datetime import datetime
 
 st.set_page_config(layout="wide")
-st.title("📰 뉴스 모니터링 대시보드")
+st.title("📰 삼성생명 AI 뉴스룸")
 
 plt.rc('font', family='AppleGothic')
 plt.rcParams['axes.unicode_minus'] = False
@@ -26,14 +28,19 @@ st.subheader("뉴스 분류")
 col1, col2, col3, col4 = st.columns(4)
 
 def pie_chart(label, positive_ratio=0.7):
-    fig, ax = plt.subplots()
     sizes = [positive_ratio, 1 - positive_ratio]
     colors = ['#4CAF50', '#F44336']
-    ax.pie(sizes, colors=colors, startangle=90, wedgeprops={'width':0.5})
-    ax.axis('equal')
-    st.pyplot(fig)
+    fig = px.pie(
+        names=["긍정", "부정"],
+        values=sizes,
+        color_discrete_sequence=colors,
+        hole=0.5
+    )
+    fig.update_traces(textinfo='percent+label')
+    st.plotly_chart(fig, use_container_width=True)
     st.markdown(f"**{label}**")
     st.markdown("🔴 부정 뉴스 예: ~~서비스 장애로 고객 불만~~")
+
 
 with col1:
     pie_chart("당사 관련 뉴스", 0.65)
@@ -74,43 +81,59 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.markdown("**기사 수 추이**")
-    fig, ax = plt.subplots()
-    x = list(range(1, 15))
-    y = [65, 60, 75, 76, 65, 55, 40, 85, 120, 110, 90, 95, 100, 130]
-    ax.plot(x, y, marker='o')
-    ax.set_xticks(x)
-    ax.set_xticklabels([f"{i}일" for i in x])
-    st.pyplot(fig)
+    fig = px.line(
+        x=list(range(1, 15)),
+        y=[65, 60, 75, 76, 65, 55, 40, 85, 120, 110, 90, 95, 100, 130],
+        markers=True,
+        labels={"x": "날짜", "y": "기사 수"}
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 with col2:
     st.markdown("**주요 키워드**")
     keywords = {"보험": 50, "디지털": 30, "서비스": 40, "소비자": 25, "시장": 35}
-    wordcloud = WordCloud(width=400, height=250, background_color="white", font_path="/System/Library/Fonts/AppleGothic.ttf").generate_from_frequencies(keywords)
-    fig, ax = plt.subplots()
-    ax.imshow(wordcloud, interpolation='bilinear')
-    ax.axis("off")
-    st.pyplot(fig)
+
+    # 키워드 데이터를 데이터프레임으로 변환
+    df_keywords = pd.DataFrame(list(keywords.items()), columns=["키워드", "빈도"])
+
+    # 트리맵 차트를 생성
+    fig = px.treemap(
+        df_keywords,
+        path=['키워드'],
+        values='빈도',
+        color='빈도',
+        color_continuous_scale='Blues'
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
 
 st.markdown("---")
 
-# 실시간 기사 테이블
 st.subheader("🕒 실시간 기사")
+
+# 데이터프레임 설정
 df = pd.DataFrame([
-    {"시간": "14:23", "매체": "경제일보", "기자": "김기자", "제목": "신규 친환경 기술 개발로 시장 선도", "감성": "긍정", "링크": "https://example.com/1"},
+    {"시간": "14:23", "매체": "경제일보", "기자": "김기자", "제목": "신규 친환경 기술 개발로 시장선도", "감성": "긍정", "링크": "https://example.com/1"},
     {"시간": "13:45", "매체": "금융투데이", "기자": "이기자", "제목": "분기별 실적 발표, 예상치 상회", "감성": "긍정", "링크": "https://example.com/2"},
-    {"시간": "12:30", "매체": "IT뉴스", "기자": "박기자", "제목": "신제품 출시 행사에서 큰 호응", "감성": "긍정", "링크": "https://example.com/3"},
+    {"시간": "12:30", "매체": "IT뉴스", "기자": "박기자", "제목": "신제품 출시 행사에서 큰 호응","감성": "긍정", "링크": "https://example.com/3"},
 ])
 
+# 링크 클릭 가능하게 하는 함수
 def make_clickable(link):
     return f'<a href="{link}" target="_blank">🔗</a>'
 
-df["링크"] = df["링크"].apply(make_clickable)
-df["감성"] = df["감성"].apply(lambda x: f'<span style="color: green; background: #d1fae5; padding: 3px 6px; border-radius: 8px;">{x}</span>')
-st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
+# 링크를 HTML로 담아서 표시하는 대신, 직접 렌더러로 감성이나 링크를 처리한다.
+df["감성"] = df["감성"].apply(lambda x: f"✔️ {x}" if x == "긍정" else f"❌ {x}")
 
-import streamlit as st
-import matplotlib.pyplot as plt
-import pandas as pd
+grid_options = GridOptionsBuilder.from_dataframe(df)
+grid_options.configure_column("링크", renderer="func", valueGetter="data.링크")
+grid_options.configure_pagination(enabled=True)
+grid_options.configure_default_column(resizable=True)
+grid_options = grid_options.build()
+
+
+# AgGrid를 사용하여 데이터프레임 출력
+AgGrid(df, gridOptions=grid_options, height=300, fit_columns_on_grid_load=True)
 
 st.subheader("📈 매체/기자 통계")
 
@@ -138,11 +161,15 @@ col1, col2 = st.columns(2)
 # 📊 왼쪽: 매체별 기사 수 (Bar chart)
 with col1:
     st.markdown("**매체별 기사 수**")
-    fig, ax = plt.subplots()
-    ax.bar(media_counts.keys(), media_counts.values(), color='#1f77b4')
-    ax.set_ylabel("기사 수")
-    ax.set_xticklabels(media_counts.keys(), rotation=15)
-    st.pyplot(fig)
+    fig = px.bar(
+        x=list(media_counts.keys()),
+        y=list(media_counts.values()),
+        labels={'x': '매체', 'y': '기사 수'},
+        # color=list(media_counts.keys()),  # 매체별로 색상을 다르게
+        color_discrete_sequence=px.colors.qualitative.Pastel  # 좀 더 부드러운 색상 사용
+    )
+    fig.update_layout(xaxis_title="매체", yaxis_title="기사 수", xaxis_tickangle=-15)
+    st.plotly_chart(fig, use_container_width=True)
 
 # 📋 오른쪽: 기자별 기사 수 (Table 스타일)
 with col2:
