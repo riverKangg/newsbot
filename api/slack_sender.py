@@ -24,7 +24,43 @@ def send_slack_message(channel, message):
     except SlackApiError as e:
         print(f"슬랙 API에 오류가 발생했습니다: {e.response['error']}")
 
-def format_news_to_message(news_data):
+def create_message(news):
+    if news['jour_name'] is not None:
+        message = f"""
+🚨 [부정기사 감지]
+키워드: {news['keyword']}
+제목: {news['title']}
+언론사: {news['press']}
+기자: {news['jour_name']}
+기자연락처: {news['phone_number']}
+링크: {news['url']}
+요약: {news['neg_sent']}
+
+"""
+    elif news['phone_number'] is None:
+        message = f"""
+🚨 [부정기사 감지]
+키워드: {news['keyword']}
+제목: {news['title']}
+언론사: {news['press']}
+기자: {news['jour_name']}
+링크: {news['url']}
+요약: {news['neg_sent']}
+
+"""
+    else:
+        message = f"""
+🚨 [부정기사 감지]
+키워드: {news['keyword']}
+제목: {news['title']}
+언론사: {news['press']}
+링크: {news['url']}
+요약: {news['neg_sent']}
+
+"""
+    return message
+
+def format_news_to_message(news):
     """
     뉴스 데이터에서 슬랙 메시지 형식으로 변환합니다.
 
@@ -34,11 +70,7 @@ def format_news_to_message(news_data):
     Returns:
     str: 슬랙에서 보낼 전체 메시지 텍스트.
     """
-    messages = []
-    for news in news_data:
-        message = f"🚨 [부정기사 감지]\n키워드: {news['keyword']}\n제목: {news['title']}\n언론사: {news['press']}\n링크: {news['url']}" 
-        messages.append(message)
-    return "\n".join(messages)
+    return create_message(news)
 
 # 테스트용 main 함수 호추가
 def main():
