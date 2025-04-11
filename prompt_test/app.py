@@ -19,10 +19,16 @@ else:
     df = pd.read_excel(os.path.join(data_dir, selected_file))
 
     # 2. 선택용 체크박스 열 추가
+    st.write("✅ 사용하고 싶은 행에 체크해주세요")
     df["선택"] = False
     df = df[["선택"] + [col for col in df.columns if col != "선택"]]
 
-    st.write("✅ 아래에서 사용하고 싶은 행에 체크해주세요")
+    # ✅ 전체 선택 체크박스
+    select_all = st.checkbox("전체 선택")
+
+    if select_all:
+        df["선택"] = True
+
     edited_df = st.data_editor(
         df,
         use_container_width=True,
