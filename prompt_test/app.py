@@ -9,7 +9,7 @@ openai.api_key = st.secrets["openai_api_key"]
 
 # 1. 엑셀 파일 선택
 current_dir = os.path.dirname(__file__)  # app.py 가 있는 폴더
-data_dir = os.path.abspath(os.path.join(current_dir, "..", "data"))
+data_dir = os.path.abspath(os.path.join(current_dir, ".", "data"))
 files = [f for f in os.listdir(data_dir) if f.endswith(".xlsx")]
 
 if not files:
