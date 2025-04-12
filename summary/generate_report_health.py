@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import openai
 import pandas as pd
 from dotenv import load_dotenv
@@ -12,15 +13,23 @@ def load_negative_articles(file_path: str) -> pd.DataFrame:
     df = pd.read_excel(file_path)
     if 'label' not in df.columns:
         raise ValueError("'label' column not found in Excel file.")
-    return df[df['label'] == 'Negative']
+    return df[df['label'] == True]
 
 def generate_report(prompt: str, articles: pd.DataFrame) -> str:
-    content = ""
-    for _, row in articles.iterrows():
-        content += f"- 제목: {row['제목']}\n  언론사: {row['언론사']}\n  요약: {row['summary']}\n  본문일부: {row['본문'][:100]}\n\n\n"
+    article_list = []
+    for idx, row in articles.iterrows():
+        article_list.append({
+            "title": row["제목"],
+            "content": row["본문"]
+        })
 
-    full_prompt = prompt + "\n\n" + content
+    # JSON 형식 문자열로 변환
+    formatted_articles = json.dumps(article_list, ensure_ascii=False, indent=2)
 
+    # 전체 프롬프트 구성
+    full_prompt = prompt + "\n\n다음은 기사 리스트입니다:\n" + formatted_articles
+
+    # OpenAI API 호출
     response = openai.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -31,7 +40,6 @@ def generate_report(prompt: str, articles: pd.DataFrame) -> str:
     )
 
     return response.choices[0].message.content.strip()
-
 def main():
     load_dotenv("../.env")
     openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -49,22 +57,34 @@ def main():
     print(f" - 카테고리 : {file_prefix}")
     print(f" - 날짜     : {date_str}")
 
-    prompt_path = f"../prompt/{file_prefix}_negative_report.txt"
-    excel_path = f"../data/{file_prefix}_{date_str}_cluster.xlsx"
-
-    prompt = load_prompt(prompt_path)
+    excel_path = f"../data/{file_prefix}_{date_str}_summary.xlsx"
     articles = load_negative_articles(excel_path)
+    index_path = f"../data/{file_prefix}_{date_str}_top3.txt"
+    with open(index_path, 'r', encoding='utf-8') as file:
+        content = file.read()
+        print(content) 
+    content = content.replace('```json', '').replace('```', '').strip()
 
-    if articles.empty:
-        print("오늘은 부정 기사가 없습니다. 축하합니다 🎉")
-        return
+    try:
+        data = json.loads(content)  # 문자열을 JSON으로 파싱
+        # index 번호 추출
+        indices = [article['index'] for article in data['selected_articles']]
+        print(indices)
+    except json.JSONDecodeError as e:
+        print(f"JSONDecodeError 발생: {e}")
+        if len(indices) != 3:
+            print("TOP3 결과 확인 필요")
 
-    report = generate_report(prompt, articles)
+    prompt_path = f"../prompt/{file_prefix}_report.txt"
+    prompt = load_prompt(prompt_path)
+    filtered_articles = articles[articles.index.isin(indices)]
+
+    report = generate_report(prompt, filtered_articles)
     report_path = f"../data/{file_prefix}_{date_str}_report.txt"
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report)
 
-    print(f"📄 부정 기사 리포트가 생성되었습니다: {report_path}")
+    print(f"📄 건강 리포트가 생성되었습니다: {report_path}")
 
 if __name__ == "__main__":
     main()
