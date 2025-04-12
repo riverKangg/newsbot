@@ -12,9 +12,9 @@ openai.api_key = st.secrets["openai_api_key"]
 
 # 디렉토리 경로
 current_dir = os.path.dirname(__file__)
-data_dir = os.path.abspath(os.path.join(current_dir, "..", "data"))
-prompt_dir = os.path.abspath(os.path.join(current_dir, "..", "prompt"))
-history_dir = os.path.abspath(os.path.join(current_dir, "..", "history"))
+data_dir = os.path.abspath(os.path.join(current_dir, ".", "data"))
+prompt_dir = os.path.abspath(os.path.join(current_dir, ".", "prompt"))
+history_dir = os.path.abspath(os.path.join(current_dir, ".", "history"))
 os.makedirs(history_dir, exist_ok=True)
 
 # 📂 데이터 파일 선택
