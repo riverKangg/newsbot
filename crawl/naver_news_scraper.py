@@ -69,13 +69,16 @@ def process_links(links, headers):
     return contents, jour_links, jour_names
 
 def main():
-    if len(sys.argv) > 1:
-        target_date = sys.argv[1]
-    else:
-        target_date = '20250410'
-    prefix = '건강' if sys.argv[2] == 'health' else '전체'
+    print("\n📄 사용법: python naver_news_scraper.py [health|cnews] [날짜: YYYYMMDD]")
 
-    df = read_excel_file(target_date, prefix)
+    if len(sys.argv) != 3:
+        print("\n❗ 인자 오류: 파일 접두사와 날짜를 정확히 입력해 주세요.")
+        sys.exit(1)
+
+    file_prefix = sys.argv[1]
+    date_str = sys.argv[2]
+
+    df = read_excel_file(date_str, file_prefix)
 
     if df is not None:
         print(f"데이터프레임의 크기: {df.shape}")
@@ -90,7 +93,7 @@ def main():
         df['본문'] = contents
         df['기자명'] = jour_names
         df['기자링크'] = jour_links
-        save_excel_file(df, target_date, prefix)
+        save_excel_file(df, date_str, file_prefix)
     else:
         print("데이터프레임을 가져올 수 없어서 프로세스를 중지합니다.")
 
