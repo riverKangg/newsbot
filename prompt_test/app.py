@@ -24,11 +24,13 @@ tab_configs = [
         "prompt_file": "cnews_summary.txt",
         "data_file": "cnews_20250411_summary.xlsx",
         "description": "뉴스를 요약합니다.",
-        "columns": ["키워드", "제목", "본문","summary"],
+        "columns": ["키워드", "제목", "본문", "summary",  "label", "is_related"],
         "column_labels": {
-            "summary": "기존요약결과"
+            "summary": "기존요약결과",
+            "label": "기존감정",
+            "is_related": "기존관련기사여부"
         },
-        "display_columns": ["제목", "본문"],
+        "display_columns": ["키워드", "제목", "본문"],
         "max_rows": 1,
         "predefined_filters": {}
     },
@@ -37,24 +39,29 @@ tab_configs = [
         "prompt_file": "cnews_negative_report.txt",
         "data_file": "cnews_20250411_summary.xlsx",
         "description": "부정적인 뉴스를 분석하여 리포트를 생성합니다.",
-        "columns": ["키워드", "제목", "본문", "언론사", "링크"],
-        "column_labels": {},
+        "columns": ["키워드", "제목", "본문", "언론사", "링크",  "label", "is_related"],
+        "column_labels": {
+            "label": "감정",
+            "is_related": "관련 기사 여부"
+        },
         "display_columns": ["키워드", "제목", "본문", "언론사", "링크"],
-        "max_rows": 5,
+        "max_rows": 20,
         "predefined_filters": {
-            "label": ["Negative"]
+            "label": ["Negative"],
+            "is_related": [True]
         }
     },
     {
         "name": "건강 뉴스 요약",
-        "prompt_file": "cnews_summary.txt",
+        "prompt_file": "health_summary.txt",
         "data_file": "health_20250411_summary.xlsx",
         "description": "건강 관련 뉴스를 요약합니다.",
-        "columns": ["키워드", "제목", "본문", "summary"],
+        "columns": ["키워드", "제목", "본문", "summary","label"],
         "column_labels": {
-            "summary": "기존요약결과"
+            "summary": "기존요약결과",
+            "label": "기존활용가능여부"
         },
-        "display_columns": ["제목", "본문"],
+        "display_columns": ["키워드", "제목", "본문"],
         "max_rows": 1,
         "predefined_filters": {
             "본문": lambda x: x is not None
@@ -66,7 +73,9 @@ tab_configs = [
         "data_file": "health_20250411_summary.xlsx",
         "description": "건강 관련 뉴스 중 가장 중요한 3개를 선정합니다.",
         "columns": ["키워드", "제목", "본문", "summary"],
-        "column_labels": {},
+        "column_labels": {
+            "summary": "요약"
+        },
         "display_columns": ["제목", "summary"],
         "max_rows": 10,
         "predefined_filters": {
@@ -78,9 +87,9 @@ tab_configs = [
         "prompt_file": "health_report.txt",
         "data_file": "health_20250411_summary.xlsx",
         "description": "건강 관련 뉴스를 분석하여 리포트를 생성합니다.",
-        "columns": ["키워드","제목", "본문"],
+        "columns": ["키워드", "제목", "본문"],
         "column_labels": {},
-        "display_columns": ["제목", "본문"],
+        "display_columns": ["키워드", "제목", "본문"],
         "max_rows": 3,
         "predefined_filters": {
             "label": [True]
@@ -137,7 +146,7 @@ for i, config in enumerate(tab_configs):
             filter_df = df.copy()
             
             # 필터에서 제외할 컬럼
-            excluded_columns = ["본문", "제목", "summary", "링크"]
+            excluded_columns = ["본문", "제목", "summary", "링크", "is_related", "label"]
             
             # 필터 가능한 컬럼 선택
             filterable_columns = [col for col in filter_df.columns if col not in excluded_columns]
@@ -150,9 +159,12 @@ for i, config in enumerate(tab_configs):
             
             # 각 컬럼별 필터 생성
             for col in selected_filter_columns:
-                if pd.api.types.is_numeric_dtype(filter_df[col]):
-                    # 숫자형 컬럼의 경우 범위 슬라이더
+                if pd.api.types.is_numeric_dtype(filter_df[col]) and not pd.api.types.is_bool_dtype(filter_df[col]):
+                    # 숫자형 컬럼의 경우 범위 슬라이더 (Boolean 제외)
                     min_val, max_val = filter_df[col].min(), filter_df[col].max()
+                    # 최소값과 최대값이 같은 경우를 처리
+                    if min_val == max_val:
+                        max_val += 1  # 최대값에 1을 더해 차이를 만듦
                     selected_range = st.slider(
                         f"{col} 범위",
                         float(min_val),
@@ -165,8 +177,11 @@ for i, config in enumerate(tab_configs):
                         (filter_df[col] <= selected_range[1])
                     ]
                 else:
-                    # 문자열/카테고리형 컬럼의 경우 멀티셀렉트
+                    # 문자열/카테고리형/Boolean 컬럼의 경우 멀티셀렉트
                     unique_vals = sorted(filter_df[col].unique())
+                    if pd.api.types.is_bool_dtype(filter_df[col]):
+                        # Boolean 컬럼의 경우 True/False만 표시
+                        unique_vals = [True, False]
                     selected_vals = st.multiselect(
                         f"{col} 필터",
                         unique_vals,
@@ -195,10 +210,12 @@ for i, config in enumerate(tab_configs):
                         "선택",
                         help="선택할 수 있는 최대 행 수: " + str(config["max_rows"]),
                         default=False,
+                        width=50
                     ),
                     **{col: st.column_config.Column(
                         config["column_labels"].get(col, col),
-                        help=config["column_labels"].get(col, col)
+                        help=config["column_labels"].get(col, col),
+                        width=100
                     ) for col in filter_df.columns if col != "선택"}
                 }
             )
@@ -247,7 +264,7 @@ for i, config in enumerate(tab_configs):
                     with st.spinner("GPT 응답을 기다리는 중..."):
                         try:
                             response = openai.chat.completions.create(
-                                model="gpt-3.5-turbo",
+                                model="gpt-4o-mini",
                                 messages=[
                                     {"role": "system", "content": "친절한 GPT 비서입니다."},
                                     {"role": "user", "content": edited_prompt},
