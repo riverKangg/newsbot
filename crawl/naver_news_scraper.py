@@ -13,6 +13,7 @@ def read_excel_file(date, prefix):
     if os.path.exists(file_path):
         df = pd.read_excel(file_path, engine='openpyxl')
         df = df.dropna(subset=['네이버링크'])
+        df = df.drop_duplicates(subset='네이버링크').reset_index(drop=True)
         return df
     else:
         print(f"파일이 존재하지 않아요: {file_path}")

@@ -86,6 +86,7 @@ def save_to_excel(file_prefix, all_news_list, date):
         if not os.path.exists(data_directory):
             os.makedirs(data_directory)
         df = pd.DataFrame(all_news_list)
+        df = df[~df['제목'].str.contains('운세')]
         if file_prefix=='health':
             desired_press = ['조선일보', '중앙일보','동아일보','한국경제','매일경제']
             df = df[df['언론사'].isin(desired_press)]
