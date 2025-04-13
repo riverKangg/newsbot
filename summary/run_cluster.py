@@ -21,14 +21,24 @@ def load_api_key():
         raise ValueError("❌ OPENAI_API_KEY가 .env에서 로드되지 않았어요!")
     client = AsyncOpenAI(api_key=api_key)
 
-def load_data(file_path, max_chars=1000):
+def load_data(file_path, max_chars=800):
     df = pd.read_excel(file_path)
-    df = df.dropna(subset=["본문"])
-    df["본문"] = df["본문"].apply(lambda x: x[:max_chars])
-    df["text"] = df["제목"].fillna("") + " " + df["본문"].fillna("")
+    df = df.dropna(subset=["label"]).reset_index(drop=True)
+    #df["text"] = df["제목"].fillna("") + " " + df["본문"].apply(lambda x: x[:max_chars]).fillna("")
+    def get_text(row):
+        if row["label"] in [True, "Negative"]:
+            title = row["제목"] if pd.notna(row["제목"]) else ""
+            content = row["본문"][:max_chars] if pd.notna(row["본문"]) else ""
+            return title + " " + content
+        return None
+
+    df["text"] = df.apply(get_text, axis=1)
     return df
 
 async def async_get_embedding(text, model="text-embedding-3-small", retry=3):
+    if text is None:
+        return [0.0] * 1536  # 만약 text가 None이라면 실패 시 zero vector 반환
+
     text = text.replace("\n", " ")
     for _ in range(retry):
         try:
@@ -42,7 +52,7 @@ async def async_get_embedding(text, model="text-embedding-3-small", retry=3):
             await asyncio.sleep(2)
     return [0.0] * 1536  # 실패 시 zero vector
 
-async def embed_all_async(df, batch_size=30):
+async def embed_all_async(df, batch_size=100):
     print("▶ 임베딩 생성 중 (비동기)...")
     texts = df["text"].tolist()
     embeddings = []
@@ -87,6 +97,19 @@ def select_representative(group):
     # 3. 그래도 없으면 그냥 첫 번째
     return group.iloc[0]
 
+def force_cluster_for_exclusives(df):
+    exclusive_mask = df["제목"].str.contains("단독", na=False)
+    noise_mask = df["cluster"] == -1
+    exclusive_noise_idx = df[exclusive_mask & noise_mask].index
+
+    # 새로운 cluster 번호를 가장 큰 클러스터 번호 다음부터 부여
+    max_cluster = df["cluster"].max()
+    for i, idx in enumerate(exclusive_noise_idx):
+        df.at[idx, "cluster"] = max_cluster + 1 + i
+
+    return df
+
+
 def extract_representatives(df):
     print("▶ 대표 기사 선택 중...")
     representatives = []
@@ -104,15 +127,19 @@ def save_results(df, output_path="대표기사_결과_openai.xlsx"):
     print(f"✅ 완료! 결과 저장됨: {output_path}")
 
 def main():
-    print("사용법: python openai_news_cluster_async.py [날짜YYYYMMDD]")
-    if len(sys.argv) > 1:
-        date_str = sys.argv[1]
-    else:
-        date_str = datetime.now().strftime("%Y%m%d")
+    print("\n📄 사용법: python run_cluster.py [health|cnews] [날짜: YYYYMMDD]")
 
-    print(f"▶ 처리 날짜: {date_str}")
+    if len(sys.argv) != 3:
+        print("\n❗ 인자 오류: 파일 접두사와 날짜를 >정확히 입력해 주세요.")
+        return
 
-    file_prefix = "회사"
+    file_prefix = sys.argv[1]
+    date_str = sys.argv[2]
+
+    print(f"\n🔍 처리 중인 파일 정보:")
+    print(f" - 카테고리 : {file_prefix}")
+    print(f" - 날짜     : {date_str}")
+
     data_directory = "../data/"
 
     input_path = f"{data_directory}{file_prefix}_{date_str}_summary.xlsx"
@@ -122,6 +149,7 @@ def main():
     df = load_data(input_path)
     df = asyncio.run(embed_all_async(df))  # async 처리!
     df = cluster_articles(df)
+    df = force_cluster_for_exclusives(df)
     result_df = extract_representatives(df)
     save_results(result_df, output_path)
 

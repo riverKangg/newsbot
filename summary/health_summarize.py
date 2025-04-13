@@ -4,22 +4,18 @@ import pandas as pd
 import sys
 from summarizer import NewsSummarizer
 
-# 엑셀 데이터 프레임 읽기 및 요약 생성
-def summarize_news_from_excel(input_file, output_file, user_message):
-    # 엑셀 파일 읽기
+def summarize_news_from_excel(input_file, output_file, prompt):
     df = pd.read_excel(input_file)
 
-    # NewsSummarizer 인스턴스 생성
     summarizer = NewsSummarizer()
 
-    # 요약 생성 및 "요약" 컬럼에 추가
     summaries = []
     for index, row in df.iterrows():
         text = row['본문']
 
         if pd.notna(text):
             print(f"Processing article {index+1}/{len(df)}...")
-            summary = summarizer.summarize_with_gpt(user_message, text)
+            summary = summarizer.summarize_with_gpt(prompt, text)
         else:
             summary = "본문 없음"
 
@@ -38,11 +34,12 @@ if __name__ == "__main__":
     else:
         date_str = datetime.now().strftime("%Y%m%d")
 
-    file_prefix = "건강"
-    user_message = "요약해줘"
+    file_prefix = "health"
+    with open("../prompt/health_summary.py", 'r', encoding='utf-8') as file:
+        prompt = file.read()
 
     data_directory = "../data/"
     input_path = f"{data_directory}{file_prefix}_{date_str}_naver.xlsx"
     output_path = f"{data_directory}{file_prefix}_{date_str}_summary.xlsx"
 
-    summarize_news_from_excel(input_path, output_path, user_message)
+    summarize_news_from_excel(input_path, output_path, prompt)

@@ -55,38 +55,48 @@ async def process_content_with_prompt(content, keywords, prompt):
         sentdict = parse_response(sentdict_raw)
 
         if sentdict is None:
-            raise ValueError("Parsed dictionary is None.")
+            raise ValueError("GPT 응답을 파싱할 수 없습니다.")
 
         is_related = sentdict.get('is_related', False)
         label = sentdict.get('label')
-        neg_sent = sentdict.get('summary')
+        summary = sentdict.get('summary')
 
-        if not label or not neg_sent:
-            raise ValueError("Sentiment or summary is missing.")
+        if label is None or summary is None:
+            raise ValueError("GPT 응답에 필수 필드가 없습니다.")
+
+        return is_related, label, summary
     except Exception as e:
-        print(f"Error processing content: {e}")
+        print(f"Error in process_content_with_prompt: {str(e)}")
+        print(f"Content: {content[:100]}...")  # 첫 100자만 로깅
         return None, None, None
 
-    return is_related, label, neg_sent
-
-async def summarize_news_from_excel(input_file, output_file, prompt):
+async def summarize_news_from_excel(input_file, output_file, prompt, file_prefix):
     df = pd.read_excel(input_file)
     df  = df.drop_duplicates(subset='본문').reset_index(drop=True)
     labels, summarys, is_relateds = [None]*len(df), [None]*len(df), [None]*len(df)
 
-    async def process_row(i, text, keywords):
+    async def process_row(i, text, keywords, file_prefix):
         print(f"Processing article {i+1}/{len(df)}...")
-        is_related, label, summary = await process_content_with_prompt(text, keywords, prompt)
-        is_relateds[i] = is_related
-        labels[i] = label or "오류"
-        summarys[i] = summary or "오류"
+        try:
+            is_related, label, summary = await process_content_with_prompt(text, keywords, prompt)
+            if is_related is None or label is None or summary is None:
+                raise ValueError("GPT 응답이 올바르지 않습니다.")
+            
+            is_relateds[i] = is_related if file_prefix == "cnews" else None
+            labels[i] = label
+            summarys[i] = summary
+        except Exception as e:
+            print(f"Error processing row {i+1}: {str(e)}")
+            is_relateds[i] = None
+            labels[i] = "오류"
+            summarys[i] = "요약 실패"
 
     tasks = []
     for i, row in df.iterrows():
         text = row['본문']
         keywords = row['키워드'] if '키워드' in row else ""
         if pd.notna(text):
-            tasks.append(process_row(i, text, keywords))
+            tasks.append(process_row(i, text, keywords, file_prefix))
         else:
             is_relateds[i] = None
             labels[i] = None
@@ -102,7 +112,8 @@ async def summarize_news_from_excel(input_file, output_file, prompt):
 
     df['summary'] = summarys
     df['label'] = labels
-    df['is_related'] = is_relateds
+    if file_prefix == "cnews":
+        df['is_related'] = is_relateds
     df.to_excel(output_file, index=False)
     print(f"요약이 완료되었습니다. 결과는 {output_file}에 저장되었습니다.")
 
@@ -134,7 +145,7 @@ async def main():
     print(f"\n📂 입력 파일 경로 : {input_path}")
     print(f"📁 출력 파일 경로 : {output_path}\n")
 
-    await summarize_news_from_excel(input_path, output_path, prompt)
+    await summarize_news_from_excel(input_path, output_path, prompt, file_prefix)
 
     print("\n✅ 뉴스 요약 완료!\n")
 
