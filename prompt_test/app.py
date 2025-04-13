@@ -17,143 +17,267 @@ prompt_dir = os.path.abspath(os.path.join(current_dir, ".", "prompt"))
 history_dir = os.path.abspath(os.path.join(current_dir, ".", "history"))
 os.makedirs(history_dir, exist_ok=True)
 
-# 📂 데이터 파일 선택
-files = [f for f in os.listdir(data_dir) if f.endswith(".xlsx")]
-if not files:
-    st.warning("data 폴더에 xlsx 파일이 없습니다.")
-    st.stop()
+# 각 탭별 프롬프트와 데이터 파일 매핑
+tab_configs = [
+    {
+        "name": "뉴스 요약",
+        "prompt_file": "cnews_summary.txt",
+        "data_file": "cnews_20250411_summary.xlsx",
+        "description": "뉴스를 요약합니다.",
+        "columns": ["키워드", "제목", "본문","summary"],
+        "column_labels": {
+            "summary": "기존요약결과"
+        },
+        "display_columns": ["제목", "본문"],
+        "max_rows": 1,
+        "predefined_filters": {}
+    },
+    {
+        "name": "부정적 뉴스 리포트",
+        "prompt_file": "cnews_negative_report.txt",
+        "data_file": "cnews_20250411_summary.xlsx",
+        "description": "부정적인 뉴스를 분석하여 리포트를 생성합니다.",
+        "columns": ["키워드", "제목", "본문", "언론사", "링크"],
+        "column_labels": {},
+        "display_columns": ["키워드", "제목", "본문", "언론사", "링크"],
+        "max_rows": 5,
+        "predefined_filters": {
+            "label": ["Negative"]
+        }
+    },
+    {
+        "name": "건강 뉴스 요약",
+        "prompt_file": "cnews_summary.txt",
+        "data_file": "health_20250411_summary.xlsx",
+        "description": "건강 관련 뉴스를 요약합니다.",
+        "columns": ["키워드", "제목", "본문", "summary"],
+        "column_labels": {
+            "summary": "기존요약결과"
+        },
+        "display_columns": ["제목", "본문"],
+        "max_rows": 1,
+        "predefined_filters": {
+            "본문": lambda x: x is not None
+        }
+    },
+    {
+        "name": "건강 뉴스 TOP3",
+        "prompt_file": "health_top3.txt",
+        "data_file": "health_20250411_summary.xlsx",
+        "description": "건강 관련 뉴스 중 가장 중요한 3개를 선정합니다.",
+        "columns": ["키워드", "제목", "본문", "summary"],
+        "column_labels": {},
+        "display_columns": ["제목", "summary"],
+        "max_rows": 10,
+        "predefined_filters": {
+            "label": [True]
+        }
+    },
+    {
+        "name": "건강 뉴스 리포트",
+        "prompt_file": "health_report.txt",
+        "data_file": "health_20250411_summary.xlsx",
+        "description": "건강 관련 뉴스를 분석하여 리포트를 생성합니다.",
+        "columns": ["키워드","제목", "본문"],
+        "column_labels": {},
+        "display_columns": ["제목", "본문"],
+        "max_rows": 3,
+        "predefined_filters": {
+            "label": [True]
+        }
+    },
 
-selected_file = st.selectbox("엑셀 파일을 선택하세요", files)
-df = pd.read_excel(os.path.join(data_dir, selected_file))
-del_cols = ["링크","네이버링크","본문","기자링크", "선택","요약"]
-df = df.drop(columns=del_cols, errors='ignore')
-if "본문" in df.columns:
-    df = df.dropna(subset=["본문"])
-if "label" in df.columns:
-    df = df.dropna(subset=["label"])
+]
 
-st.subheader("🔍 필터 설정")
+# 탭 생성
+tabs = st.tabs([config["name"] for config in tab_configs])
 
-# 선택 가능한 필터 컬럼 리스트 (선택 컬럼은 제외)
-filterable_cols = [col for col in df.columns if col not in ["본문", "선택"]]
-selected_filter_cols = st.multiselect("필터에 사용할 컬럼 선택", filterable_cols)
-
-# 원본 복사
-filter_df = df.copy()
-
-# 선택된 컬럼에 따라 필터 위젯 생성
-for col in selected_filter_cols:
-    if pd.api.types.is_numeric_dtype(filter_df[col]):
-        min_val, max_val = filter_df[col].min(), filter_df[col].max()
-        selected_range = st.slider(f"{col} 범위", float(min_val), float(max_val), (float(min_val), float(max_val)))
-        filter_df = filter_df[(filter_df[col] >= selected_range[0]) & (filter_df[col] <= selected_range[1])]
+# 각 탭 생성
+for i, config in enumerate(tab_configs):
+    with tabs[i]:
+        st.subheader(f"✍️ {config['name']}")
+        st.write(f"**{config['description']}**")
         
-    elif pd.api.types.is_string_dtype(filter_df[col]) or pd.api.types.is_categorical_dtype(filter_df[col]):
-        # NaN 포함된 임시 컬럼 생성
-        temp_col = filter_df[col].fillna("❌ 없음")
-        unique_vals = sorted(temp_col.unique())
-        selected_vals = st.multiselect(f"{col} 필터", unique_vals)
-
-        if selected_vals:
-            # '❌ 없음' 포함 여부 확인
-            include_nan = "❌ 없음" in selected_vals
-            actual_selected_vals = [val for val in selected_vals if val != "❌ 없음"]
-
-            # 원본 컬럼 기준으로 필터링
-            condition = filter_df[col].isin(actual_selected_vals)
-            if include_nan:
-                condition = condition | filter_df[col].isna()
-            filter_df = filter_df[condition]
-
-
-
-# 필터링된 결과에 '선택' 체크박스 붙이기
-filter_df["선택"] = False
-filter_df = filter_df[["선택"] + [col for col in filter_df.columns if col != "선택"]]
-
-select_all = st.checkbox("전체 선택", value=False)
-if select_all:
-    filter_df["선택"] = True
-
-# ✅ 행 선택 UI
-st.write("👇 사용하고 싶은 행에 체크해주세요")
-edited_df = st.data_editor(
-    filter_df,
-    use_container_width=True,
-    num_rows="fixed",
-    hide_index=True,
-    key="data_selector"
-)
-selected_rows_df = edited_df[edited_df["선택"] == True]
-
-
-st.subheader("🔍 프롬프트에 넣을 컬럼 선택")
-
-# 사용자가 선택할 컬럼 리스트 (선택 컬럼 제외)
-columns_for_prompt = [col for col in df.columns if col != "선택"]
-selected_columns = st.multiselect("프롬프트에 넣을 컬럼 선택", columns_for_prompt)
-
-# 📦 선택한 행 데이터 문자열로 합치기
-selected_data_str = ""
-for i, row in selected_rows_df[selected_columns].iterrows():
-    row_str = "\n".join([f"{k}: {v}" for k, v in row.astype(str).items()])
-    selected_data_str += f"\n\n[Row {i}]\n{row_str}"
-st.text_area("인풋 형태:\n", selected_data_str, height=200)
-
-
-st.subheader("✍️  프롬프트 입력")
-# 📁 프롬프트 템플릿 로딩
-prompt_files = [f for f in os.listdir(prompt_dir) if f.endswith(".txt")]
-selected_prompt_file = st.selectbox("프롬프트 템플릿 선택 (선택 안 해도 됨)", ["직접 입력"] + prompt_files)
-
-default_prompt = ""
-if selected_prompt_file != "직접 입력":
-    with open(os.path.join(prompt_dir, selected_prompt_file), "r", encoding="utf-8") as f:
-        default_prompt = f.read()
-
-# ✍️ 프롬프트 입력
-prompt = st.text_area("프롬프트를 입력하세요", value=default_prompt, height=350)
-full_prompt = f"{prompt}\n\n선택된 데이터:\n{selected_data_str}"
-
-
-
-# 💾 히스토리 저장 함수
-def save_history(prompt_text, response_text):
-    history_data = {
-        "timestamp": datetime.now().isoformat(),
-        "prompt": prompt_text,
-        "response": response_text,
-    }
-    filename = f"history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    filepath = os.path.join(history_dir, filename)
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(history_data, f, ensure_ascii=False, indent=2)
-
-# 🤖 GPT 호출
-if st.button("GPT에게 보내기"):
-    if not prompt:
-        st.error("프롬프트를 입력해주세요.")
-    elif selected_rows_df.empty:
-        st.error("최소 한 개 이상의 행을 선택해주세요.")
-    else:
-        with st.spinner("GPT 응답을 기다리는 중..."):
-            try:
-                response = openai.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": "친절한 GPT 비서입니다."},
-                        {"role": "user", "content": full_prompt},
+        try:
+            # 데이터 로드
+            data_path = os.path.join(data_dir, config["data_file"])
+            df = pd.read_excel(data_path)
+            
+            # 지정된 컬럼만 선택
+            available_columns = [col for col in config["columns"] if col in df.columns]
+            df = df[available_columns]
+            
+            # NaN 값이 있는 행 제거
+            df = df.dropna()
+            
+            # 미리 정의된 필터 적용
+            if config["predefined_filters"]:
+                for col, condition in config["predefined_filters"].items():
+                    if col in df.columns:
+                        if isinstance(condition, list):
+                            # Boolean 값 처리
+                            if isinstance(condition[0], bool):
+                                df = df[df[col] == condition[0]]
+                            else:
+                                df = df[df[col].isin(condition)]
+                        elif callable(condition):
+                            df = df[df[col].apply(condition)]
+            
+   
+            # 프롬프트 로드
+            prompt_path = os.path.join(prompt_dir, config["prompt_file"])
+            with open(prompt_path, "r", encoding="utf-8") as f:
+                default_prompt = f.read()
+            
+            # 데이터 선택 UI
+            st.subheader("🔍 데이터 선택")
+            
+            # 필터 UI 추가
+            st.subheader("필터 설정")
+            filter_df = df.copy()
+            
+            # 필터에서 제외할 컬럼
+            excluded_columns = ["본문", "제목", "summary", "링크"]
+            
+            # 필터 가능한 컬럼 선택
+            filterable_columns = [col for col in filter_df.columns if col not in excluded_columns]
+            selected_filter_columns = st.multiselect(
+                "필터에 사용할 컬럼 선택",
+                filterable_columns,
+                default=filterable_columns,
+                key=f"filter_columns_{i}"
+            )
+            
+            # 각 컬럼별 필터 생성
+            for col in selected_filter_columns:
+                if pd.api.types.is_numeric_dtype(filter_df[col]):
+                    # 숫자형 컬럼의 경우 범위 슬라이더
+                    min_val, max_val = filter_df[col].min(), filter_df[col].max()
+                    selected_range = st.slider(
+                        f"{col} 범위",
+                        float(min_val),
+                        float(max_val),
+                        (float(min_val), float(max_val)),
+                        key=f"filter_{col}_{i}"
+                    )
+                    filter_df = filter_df[
+                        (filter_df[col] >= selected_range[0]) & 
+                        (filter_df[col] <= selected_range[1])
                     ]
+                else:
+                    # 문자열/카테고리형 컬럼의 경우 멀티셀렉트
+                    unique_vals = sorted(filter_df[col].unique())
+                    selected_vals = st.multiselect(
+                        f"{col} 필터",
+                        unique_vals,
+                        default=unique_vals,
+                        key=f"filter_{col}_{i}"
+                    )
+                    if selected_vals:
+                        filter_df = filter_df[filter_df[col].isin(selected_vals)]
+            
+            # '선택' 컬럼 추가
+            filter_df["선택"] = False
+            filter_df = filter_df[["선택"] + [col for col in filter_df.columns if col != "선택"]]
+            
+            # 선택 가능한 행 수 표시
+            st.caption(f"선택 가능한 행 수: {config['max_rows']}개")
+            
+            # 데이터 에디터
+            edited_df = st.data_editor(
+                filter_df,
+                use_container_width=True,
+                num_rows="fixed",
+                hide_index=True,
+                key=f"data_editor_{i}",
+                column_config={
+                    "선택": st.column_config.CheckboxColumn(
+                        "선택",
+                        help="선택할 수 있는 최대 행 수: " + str(config["max_rows"]),
+                        default=False,
+                    ),
+                    **{col: st.column_config.Column(
+                        config["column_labels"].get(col, col),
+                        help=config["column_labels"].get(col, col)
+                    ) for col in filter_df.columns if col != "선택"}
+                }
+            )
+            
+            # 선택된 행만 필터링
+            selected_df = edited_df[edited_df["선택"] == True]
+            
+            # 최대 선택 가능한 행 수 확인
+            if len(selected_df) > config["max_rows"]:
+                st.error(f"최대 {config['max_rows']}개의 행만 선택할 수 있습니다.")
+                st.stop()
+            
+            if not selected_df.empty:
+                # 선택된 데이터 표시
+                st.subheader("✅ 선택된 데이터")
+                
+                # 컬럼 너비 설정
+                column_config = {
+                    col: st.column_config.Column(
+                        config["column_labels"].get(col, col),
+                        width="small"
+                    ) for col in config["display_columns"]
+                }
+                
+                # 데이터 에디터로 표시
+                edited_df = st.data_editor(
+                    selected_df[config["display_columns"]],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config=column_config,
+                    disabled=True
                 )
-                result = response.choices[0].message.content
-                st.success("✅ GPT의 응답:")
-                st.write(result)
+                
+                # 📦 선택한 행 데이터 문자열로 합치기
+                data_str = ""
+                for idx, row in selected_df[config["display_columns"]].iterrows():
+                    row_str = "\n".join([f"{k}: {v}" for k, v in row.astype(str).items()])
+                    data_str += f"\n\n[Row {idx}]\n{row_str}"
+                
+                st.subheader("📝 전체 프롬프트")
+                full_prompt = f"{default_prompt}\n\n데이터:\n{data_str}"
+                edited_prompt = st.text_area("프롬프트를 수정하세요", value=full_prompt, height=300, key=f"full_prompt_{i}")
+                
+                # 🤖 GPT 호출 버튼
+                if st.button("GPT에게 보내기", key=f"send_{i}"):
+                    with st.spinner("GPT 응답을 기다리는 중..."):
+                        try:
+                            response = openai.chat.completions.create(
+                                model="gpt-3.5-turbo",
+                                messages=[
+                                    {"role": "system", "content": "친절한 GPT 비서입니다."},
+                                    {"role": "user", "content": edited_prompt},
+                                ]
+                            )
+                            result = response.choices[0].message.content
+                            st.success("✅ GPT의 응답:")
+                            st.markdown(f'<div style="white-space: pre-wrap; word-wrap: break-word;">{result}</div>', unsafe_allow_html=True)
 
-                save_history(full_prompt, result)
-                st.toast("히스토리에 저장되었습니다!", icon="💾")
+                            # 💾 히스토리 저장
+                            history_data = {
+                                "timestamp": datetime.now().isoformat(),
+                                "prompt": edited_prompt,
+                                "response": result,
+                            }
+                            filename = f"history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                            filepath = os.path.join(history_dir, filename)
+                            with open(filepath, "w", encoding="utf-8") as f:
+                                json.dump(history_data, f, ensure_ascii=False, indent=2)
+                            st.toast("히스토리에 저장되었습니다!", icon="💾")
 
-            except Exception as e:
-                st.error(f"에러 발생: {e}")
+                        except Exception as e:
+                            st.error(f"에러 발생: {e}")
+            else:
+                st.warning("데이터를 선택해주세요.")
+                        
+        except FileNotFoundError as e:
+            st.error(f"파일을 찾을 수 없습니다: {e}")
+        except Exception as e:
+            st.error(f"오류가 발생했습니다: {e}")
 
 # 📜 히스토리 보기
 with st.expander("📂 히스토리 보기"):
