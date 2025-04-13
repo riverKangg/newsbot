@@ -10,6 +10,7 @@ def load_prompt(prompt_path: str) -> str:
 
 def load_negative_articles(file_path: str) -> pd.DataFrame:
     df = pd.read_excel(file_path)
+    df = df[df['is_related'] == True].reset_index(drop=True)
     if 'label' not in df.columns:
         raise ValueError("'label' column not found in Excel file.")
     return df[df['label'] == 'Negative']
@@ -17,7 +18,7 @@ def load_negative_articles(file_path: str) -> pd.DataFrame:
 def generate_report(prompt: str, articles: pd.DataFrame) -> str:
     content = ""
     for _, row in articles.iterrows():
-        content += f"- 제목: {row['제목']}\n  언론사: {row['언론사']}\n  요약: {row['summary']}\n  본문일부: {row['본문'][:100]}\n\n\n"
+        content += f"- 제목: {row['제목']}\n  언론사: {row['언론사']}\n  요약: {row['summary']}\n  본문일부: {row['본문']}\n\n\n"
 
     full_prompt = prompt + "\n\n" + content
 
@@ -50,7 +51,7 @@ def main():
     print(f" - 날짜     : {date_str}")
 
     prompt_path = f"../prompt/{file_prefix}_negative_report.txt"
-    excel_path = f"../data/{file_prefix}_{date_str}_cluster.xlsx"
+    excel_path = f"../data/{file_prefix}_{date_str}_summary.xlsx"
 
     prompt = load_prompt(prompt_path)
     articles = load_negative_articles(excel_path)
