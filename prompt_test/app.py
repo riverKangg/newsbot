@@ -72,11 +72,12 @@ tab_configs = [
         "prompt_file": "health_top3.txt",
         "data_file": "health_20250411_summary.xlsx",
         "description": "건강 관련 뉴스 중 가장 중요한 3개를 선정합니다.",
-        "columns": ["키워드", "제목", "본문", "summary"],
+        "columns": ["키워드", "제목", "본문", "summary", "label"],
         "column_labels": {
-            "summary": "요약"
+            "summary": "요약",
+            "label": "활용가능여부"
         },
-        "display_columns": ["제목", "summary"],
+        "display_columns": ["제목", "summary","label"],
         "max_rows": 10,
         "predefined_filters": {
             "label": [True]
@@ -88,7 +89,8 @@ tab_configs = [
         "data_file": "health_20250411_summary.xlsx",
         "description": "건강 관련 뉴스를 분석하여 리포트를 생성합니다.",
         "columns": ["키워드", "제목", "본문","label"],
-        "column_labels": {},
+        "column_labels": {
+            "label": "활용가능여부"},
         "display_columns": ["키워드", "제목", "본문"],
         "max_rows": 3,
         "predefined_filters": {
