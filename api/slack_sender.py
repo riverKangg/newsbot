@@ -25,7 +25,7 @@ def send_slack_message(channel, message):
         print(f"슬랙 API에 오류가 발생했습니다: {e.response['error']}")
 
 def create_message(news):
-    if news['jour_name'] is not None:
+    if news['jour_name'] is not None and news['phone_number'] is None :
         message = f"""
 🚨 [부정기사 감지]
 키워드: {news['keyword']}
