@@ -87,7 +87,7 @@ tab_configs = [
         "prompt_file": "health_report.txt",
         "data_file": "health_20250411_summary.xlsx",
         "description": "건강 관련 뉴스를 분석하여 리포트를 생성합니다.",
-        "columns": ["키워드", "제목", "본문","lable"],
+        "columns": ["키워드", "제목", "본문","label"],
         "column_labels": {},
         "display_columns": ["키워드", "제목", "본문"],
         "max_rows": 3,
