@@ -1,0 +1,19 @@
+python_version == 3.13.2
+
+beautifulsoup4==4.13.3
+fastapi==0.115.12
+matplotlib==3.10.1
+numpy==2.2.4
+openai==1.73.0
+pandas==2.2.3
+plotly==6.0.1
+pydantic==2.11.3
+python-dotenv==1.1.0
+Requests==2.32.3
+scikit_learn==1.6.1
+selenium==4.31.0
+slack_sdk==3.35.0
+streamlit==1.44.1
+tqdm==4.67.1
+webdriver_manager==4.0.2
+wordcloud==1.9.4
