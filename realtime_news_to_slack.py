@@ -14,6 +14,21 @@ from summary.summarizer import NewsSummarizer
 from crawl.naver_news_one import process_link
 from api.slack_sender import send_slack_message, format_news_to_message
 
+prompt = """
+너는 삼성생명 홍보팀 직원이야.
+기사에 대한 긍부정을 판단하고,
+회사에 보고할 수 있게 기사를 한 줄로 정리해줘.
+
+1. Classify the sentiment as one of the following: Positive, Negative, or Neutral.
+2. 회사에 보고할 수 있게 한 문장으로 작성해줘. 한글로 작성해.
+3. Return the result in a strict JSON format using the keys: 'sentiment' and 'sentence'.
+
+Expected return format:
+{
+    "sentiment": "Positive" | "Negative" | "Neutral",
+    "sentence": "One-sentence summary that reflects the sentiment."
+}
+"""
 news_sources = [
     # 종합지
     "조선일보", "중앙일보", "동아일보", "한국일보", "국민일보", "서울신문", "세계일보",
@@ -64,7 +79,6 @@ def process_content_with_prompt(content, prompt):
     try:
         summarizer = NewsSummarizer()
         sentdict_raw = summarizer.summarize_with_gpt(content, prompt)
-
         sentdict = parse_response(sentdict_raw)
 
         if sentdict is None:
@@ -105,6 +119,7 @@ def naver_news_scraper(query, date, category):
     print(f"🔍 검색 시작 - 카테고리: '{category}', 키워드: '{query}'")
     url = build_naver_news_url(query, date)
     driver = web_driver()
+    results = [] 
     try:
         driver.get(url)
         time.sleep(1)
@@ -175,19 +190,21 @@ Expected return format:
                     message = format_news_to_message(news_item)
                     send_slack_message("#newsbot-test", message)
                     print(f"📤 슬랙으로 전송 완료 - 제목: '{title}'")
+                    results.append(news_item)
     finally:
         driver.quit()
+    return results
 
 if __name__ == "__main__":
     date = datetime.now().strftime('%Y%m%d')
     selected_keywords = {
         "test": ["윤석열"],
-        #"당사": ["삼성생명", "홍원학"],
-        #"보험": ["생명보험", "손해보험", "생보", "손보", "보험사기",
-        #        "실손", "무해지", "저해지", "IFRS17", "킥스",
-        #        "삼성화재", "한화생명", "교보생명", "신한라이프"],
-        #"그룹": ["이재용", "홍라희", "이부진", "이서현", "삼성전자", "삼성물산"],
-        #"금융": ["금융위", "금감원", "김병환", "이복현", "금융지주"]
+        "당사": ["삼성생명", "홍원학"],
+        "보험": ["생명보험", "손해보험", "생보", "손보", "보험사기",
+                "실손", "무해지", "저해지", "IFRS17", "킥스",
+                "삼성화재", "한화생명", "교보생명", "신한라이프"],
+        "그룹": ["이재용", "홍라희", "이부진", "이서현", "삼성전자", "삼성물산"],
+        "금융": ["금융위", "금감원", "김병환", "이복현", "금융지주"]
     }
 
     while True:

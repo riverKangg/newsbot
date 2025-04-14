@@ -148,7 +148,7 @@ for i, config in enumerate(tab_configs):
             filter_df = df.copy()
             
             # 필터에서 제외할 컬럼
-            excluded_columns = ["본문", "제목", "summary", "링크", "is_related", "label"]
+            excluded_columns = ["본문", "제목", "summary", "링크", "is_related", "label","활용가능여부"]
             
             # 필터 가능한 컬럼 선택
             filterable_columns = [col for col in filter_df.columns if col not in excluded_columns]
