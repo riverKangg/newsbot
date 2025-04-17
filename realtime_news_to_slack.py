@@ -1,5 +1,7 @@
 import os
+import re
 import sys
+import json
 import time
 import random
 from datetime import datetime
@@ -14,21 +16,8 @@ from summary.summarizer import NewsSummarizer
 from crawl.naver_news_one import process_link
 from api.slack_sender import send_slack_message, format_news_to_message
 
-prompt = """
-너는 삼성생명 홍보팀 직원이야.
-기사에 대한 긍부정을 판단하고,
-회사에 보고할 수 있게 기사를 한 줄로 정리해줘.
-
-1. Classify the sentiment as one of the following: Positive, Negative, or Neutral.
-2. 회사에 보고할 수 있게 한 문장으로 작성해줘. 한글로 작성해.
-3. Return the result in a strict JSON format using the keys: 'sentiment' and 'sentence'.
-
-Expected return format:
-{
-    "sentiment": "Positive" | "Negative" | "Neutral",
-    "sentence": "One-sentence summary that reflects the sentiment."
-}
-"""
+with open(f"./prompt/cnews_summary.txt", 'r',encoding='utf-8') as file:
+    prompt = file.read()
 news_sources = [
     # 종합지
     "조선일보", "중앙일보", "동아일보", "한국일보", "국민일보", "서울신문", "세계일보",
@@ -59,21 +48,59 @@ def generate_random_phone_number():
     return f"010-{middle}-{last}"
 
 def parse_response(response):
-    import json, re
     try:
-        # 정규 표현식을 사용해서 JSON 블록 추출
-        json_match = re.search(r'\{.*?\}', response, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(0)
-            # JSON 문자열을 딕셔너리로 파싱
-            result = json.loads(json_str)
-            return result
-        else:
-            print("No JSON found in the response.")
-            return None
-    except json.JSONDecodeError as e:
-        print(f"Error parsing JSON: {e}")
-        return None
+        # 여러 번 나누어진 응답을 하나로 합치기
+        if isinstance(response, list):
+            response = "".join(response)
+        
+        # 마크다운 코드 블록 제거
+        response = response.strip()
+        if '```json' in response:
+            response = response.split('```json')[1]
+        if '```' in response:
+            response = response.split('```')[0]
+        response = response.strip()
+        
+        # JSON 문자열 정규화
+        response = response.replace('\n', ' ').replace('\r', '')
+        response = re.sub(r'\s+', ' ', response)
+        response = response.replace('False','false').replace('True','true')
+        response = re.sub("'", '', response)
+
+        # 중복된 JSON 응답 제거
+        if response.count('{') > 1:
+            # 마지막 완전한 JSON 객체만 사용
+            last_brace = response.rfind('}')
+            if last_brace != -1:
+                response = response[:last_brace+1]
+        
+        # JSON 파싱
+        result = json.loads(response)
+        print(result)
+        
+        # 필수 필드가 없는 경우 기본값 설정
+        if 'is_related' not in result:
+            result['is_related'] = False
+        if 'label' not in result:
+            result['label'] = 'False'
+        if 'summary' not in result:
+            result['summary'] = '요약 실패'
+            
+        # label 값이 예상된 형식이 아닌 경우 수정
+        if isinstance(result['label'], bool):
+            result['label'] = 'True' if result['label'] else 'False'
+        elif result['label'] not in ['True', 'False', 'Positive', 'Negative', 'Neutral']:
+            result['label'] = 'False'
+            
+        return result
+    except Exception as e:
+        print(f"Unexpected error in parse_response: {e}")
+        print(f"Raw response: {response}")
+        return {
+            'is_related': False,
+            'label': 'Neutral',
+            'summary': '요약 실패'
+        }
 
 def process_content_with_prompt(content, prompt):
     try:
@@ -84,17 +111,15 @@ def process_content_with_prompt(content, prompt):
         if sentdict is None:
             raise ValueError("Parsed dictionary is None.")
 
-        sentiment_label = sentdict.get('sentiment')
-        neg_sent = sentdict.get('sentence')
+        is_related = sentdict.get('is_related', False)
+        label = sentdict.get('label')
+        summary = sentdict.get('summary')
 
-        if not sentiment_label or not neg_sent:
-            raise ValueError("Sentiment or sentence is missing from the response.")
-
+        return is_related, label, summary
     except Exception as e:
-        print(f"Error processing content: {e}")
-        return None, None
-
-    return sentiment_label, neg_sent
+        print(f"Error in process_content_with_prompt: {str(e)}")
+        print(f"Content: {content[:100]}...")  # 첫 100자만 로깅
+        return False, "False", "요약 실패"
 
 def web_driver():
     options = Options()
@@ -138,38 +163,28 @@ def naver_news_scraper(query, date, category):
             test = item.find("div", class_="info_group")
             time_elem = test.find('span', class_='info').text.strip()
             naver_link = test.find_all('a')[-1].get('href') if test and 'naver' in test.find_all('a')[-1].get('href') else None
-
-            # 시간 파싱 및 필터링
-            time_delta_minutes = None
-            if '분 전' in time_elem:
-                time_delta_minutes = int(time_elem.replace('분 전', '').strip())
-            elif '시간 전' in time_elem:
-                time_delta_minutes = int(time_elem.replace('시간 전', '').strip()) * 60
-
             if naver_link is not None:
                 print(f"🔗 기사 링크 분석 중: {naver_link}")
+
+                # 시간 파싱 및 필터링
+                time_delta_minutes = None
+                if '분 전' in time_elem:
+                    time_delta_minutes = int(time_elem.replace('분 전', '').strip())
+                elif '시간 전' in time_elem:
+                    time_delta_minutes = int(time_elem.replace('시간 전', '').strip()) * 60
+
                 content, jour_link, jour_name = process_link(naver_link)
                 summarizer = NewsSummarizer()
-                prompt = """
-너는 삼성생명 홍보팀 직원이야.
-기사에 대한 긍부정을 판단하고,
-회사에 보고할 수 있게 기사를 한 줄로 정리해줘.
-
-1. Classify the sentiment as one of the following: Positive, Negative, or Neutral.
-2. 회사에 보고할 수 있게 한 문장으로 작성해줘. 한글로 작성해. 
-3. Return the result in a strict JSON format using the keys: 'sentiment' and 'sentence'.
-
-Expected return format:
-{
-    "sentiment": "Positive" | "Negative" | "Neutral",
-    "sentence": "One-sentence summary that reflects the sentiment."
-}
-""" 
-                sentiment_label, neg_sent = process_content_with_prompt(content, prompt)
+                is_related, label, summary = process_content_with_prompt(content, prompt)
  
-                print(f"📝 감정 분석 결과: {sentiment_label} {sentiment_label == 'Negative'}")
-
-                if sentiment_label == "Negative" and time_delta_minutes is not None and time_delta_minutes <= 30:
+                print(f"📊 분석 결과:")
+                print(f"  - 관련성: {is_related}")
+                print(f"  - 감정: {label}")
+                print(f"  - 요약: {summary}")
+                print(f"  - 기자: {jour_name}")
+                print(f"  - 기자 링크: {jour_link}")
+ 
+                if label == "Negative" and time_delta_minutes is not None and time_delta_minutes <= 2:
                     random_phone_number = generate_random_phone_number() if press in news_sources else None
 
                     news_item = {
@@ -188,7 +203,7 @@ Expected return format:
                         "neg_sent" : neg_sent
                     }
                     message = format_news_to_message(news_item)
-                    send_slack_message("#newsbot-test", message)
+                    send_slack_message("#news-feed", message)
                     print(f"📤 슬랙으로 전송 완료 - 제목: '{title}'")
                     results.append(news_item)
     finally:
