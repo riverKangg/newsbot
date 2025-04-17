@@ -17,7 +17,7 @@ class NewsSummarizer:
                 model="gpt-4o",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that summarizes news articles. You must respond in JSON format only."},
-                    {"role": "user", "content": f"{user_message}\n\n본문: {text}\n\n반드시 다음 JSON 형식으로만 응답하세요:\n{{\n  \"is_related\": true|false,\n  \"label\": \"True\"|\"False\",\n  \"summary\": \"기사 내용을 반영한 한 문장 요약 (100자 이내)\"\n}}"}
+                    {"role": "user", "content": f"{user_message}\n\n본문: {text}"}
                 ],
                 max_tokens=500,
                 n=1,
