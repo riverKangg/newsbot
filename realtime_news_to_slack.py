@@ -42,6 +42,24 @@ news_sources = [
     "서울파이낸스", "대한금융신문", "한국금융", "금융경제"
 ]
 
+# ✅ 파일 경로 설정 (상단에 추가)
+PROCESSED_LINKS_FILE = "processed_links.json"
+
+# ✅ 링크 로드 함수
+def load_processed_links():
+    if os.path.exists(PROCESSED_LINKS_FILE):
+        with open(PROCESSED_LINKS_FILE, "r", encoding="utf-8") as f:
+            return set(json.load(f))
+    return set()
+
+# ✅ 링크 저장 함수
+def save_processed_links(processed_links):
+    with open(PROCESSED_LINKS_FILE, "w", encoding="utf-8") as f:
+        json.dump(list(processed_links), f, ensure_ascii=False, indent=2)
+
+# ✅ 전역 링크 세트
+processed_links = load_processed_links()
+
 def generate_random_phone_number():
     middle = random.randint(1000, 9999)
     last = random.randint(1000, 9999)
@@ -151,21 +169,24 @@ def naver_news_scraper(query, date, category):
         soup = BeautifulSoup(driver.page_source, "html.parser")
         news_items = soup.select(".news_area")
         print(f"📰 발견된 뉴스 수: {len(news_items)}")
-        for item in news_items:
-            title_elem = item.select_one(".news_tit")
-            title = title_elem.text.strip()
-            link = title_elem["href"]
-            press_elem = item.select_one(".info.press")
-            press = press_elem.text.strip() if press_elem else "언론사 정보 없음"
-            desc_elem = item.select_one(".dsc_txt_wrap")
-            description = desc_elem.text.strip() if desc_elem else "요약 정보 없음"
-
+        
+        for i, item in enumerate(news_items):
             test = item.find("div", class_="info_group")
-            time_elem = test.find('span', class_='info').text.strip()
             naver_link = test.find_all('a')[-1].get('href') if test and 'naver' in test.find_all('a')[-1].get('href') else None
-            if naver_link is not None:
-                print(f"🔗 기사 링크 분석 중: {naver_link}")
+            print(f" 네이버 링크 상태({i}/{len(news_items)})")
+            if naver_link is not None and naver_link not in processed_links:
 
+                title_elem = item.select_one(".news_tit")
+                title = title_elem.text.strip()
+                link = title_elem["href"]
+                press_elem = item.select_one(".info.press")
+                press = press_elem.text.strip() if press_elem else "언론사 정보 없음"
+                desc_elem = item.select_one(".dsc_txt_wrap")
+                description = desc_elem.text.strip() if desc_elem else "요약 정보 없음"
+
+                time_elem = test.find('span', class_='info').text.strip()
+            
+            
                 # 시간 파싱 및 필터링
                 time_delta_minutes = None
                 if '분 전' in time_elem:
@@ -198,9 +219,10 @@ def naver_news_scraper(query, date, category):
                         "time": time_elem,
                         "content": content,
                         "jour_name": jour_name,
-                        "sentiment_label": sentiment_label,
                         "phone_number" : random_phone_number,
-                        "neg_sent" : neg_sent
+                        "is_related": is_related,
+                        "sentiment": label,
+                        "neg_sent": summary,
                     }
                     message = format_news_to_message(news_item)
                     send_slack_message("#news-feed", message)
@@ -227,5 +249,3 @@ if __name__ == "__main__":
             for query in keyword_list:
                 naver_news_scraper(query, date, category)
 
-        print("[대기 중 💤] 1분 후 재시작\n")
-        time.sleep(60)
