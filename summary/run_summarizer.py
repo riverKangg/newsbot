@@ -10,6 +10,10 @@ import re
 
 def parse_response(response):
     try:
+        # 여러 번 나누어진 응답을 하나로 합치기
+        if isinstance(response, list):
+            response = "".join(response)
+        
         # 마크다운 코드 블록 제거
         response = response.strip()
         if '```json' in response:
@@ -17,7 +21,20 @@ def parse_response(response):
         if '```' in response:
             response = response.split('```')[0]
         response = response.strip()
-            
+        
+        # JSON 문자열 정규화
+        response = response.replace('\n', ' ').replace('\r', '')
+        response = re.sub(r'\s+', ' ', response)
+        response = response.replace('False','false').replace('True','true')
+        response = re.sub("'", '', response)
+
+        # 중복된 JSON 응답 제거
+        if response.count('{') > 1:
+            # 마지막 완전한 JSON 객체만 사용
+            last_brace = response.rfind('}')
+            if last_brace != -1:
+                response = response[:last_brace+1]
+        
         # JSON 파싱
         result = json.loads(response)
         
@@ -36,14 +53,15 @@ def parse_response(response):
             result['label'] = 'False'
             
         return result
-    except json.JSONDecodeError as e:
-        print(f"Error parsing JSON: {e}")
+    except Exception as e:
+        print(f"Unexpected error in parse_response: {e}")
         print(f"Raw response: {response}")
         return {
             'is_related': False,
-            'label': 'False',
+            'label': 'Neutral',
             'summary': '요약 실패'
         }
+
 
 async def process_content_with_prompt(content, keywords, prompt):
     try:
@@ -52,6 +70,11 @@ async def process_content_with_prompt(content, keywords, prompt):
         full_prompt = f"{prompt}\n\n관련 키워드: {keywords}"
         # GPT 호출을 asyncio.to_thread로 비동기 처리
         sentdict_raw = await asyncio.to_thread(summarizer.summarize_with_gpt, full_prompt, content)
+        
+        # 응답이 여러 번 나누어진 경우 리스트로 변환
+        if isinstance(sentdict_raw, str):
+            sentdict_raw = [sentdict_raw]
+        
         sentdict = parse_response(sentdict_raw)
 
         if sentdict is None:
@@ -68,7 +91,7 @@ async def process_content_with_prompt(content, keywords, prompt):
     except Exception as e:
         print(f"Error in process_content_with_prompt: {str(e)}")
         print(f"Content: {content[:100]}...")  # 첫 100자만 로깅
-        return None, None, None
+        return False, "False", "요약 실패"
 
 async def summarize_news_from_excel(input_file, output_file, prompt, file_prefix):
     df = pd.read_excel(input_file)
