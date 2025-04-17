@@ -1,4 +1,4 @@
-# news_list_scraper2.py
+# news_list_scraper.py
 
 import os
 import sys

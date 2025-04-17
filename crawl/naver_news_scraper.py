@@ -50,9 +50,17 @@ def extract_journalist_info(soup):
 
     return jour_link, jour_name
 
+def time_info(soup):
+    span = soup.find('span', class_='media_end_head_info_datestamp_time _ARTICLE_DATE_TIME')
+    if span is not None:
+        time_elem = span['data-date-time']
+    else:
+        time_elem = ''
+    return time_elem
 
 def process_links(links, headers):
     contents, jour_links, jour_names = [], [], []
+    times = []
 
     for url in links:
         if isinstance(url, str) and url.startswith('http'):
@@ -62,12 +70,15 @@ def process_links(links, headers):
             jour_link, jour_name = extract_journalist_info(soup)
             jour_links.append(jour_link)
             jour_names.append(jour_name)
+            time_text = time_info(soup)
+            times.append(time_text)
         else:
             contents.append('')
             jour_links.append('')
             jour_names.append('')
+            times.append('')
 
-    return contents, jour_links, jour_names
+    return contents, jour_links, jour_names, times
 
 def main():
     print("\n📄 사용법: python naver_news_scraper.py [health|cnews] [날짜: YYYYMMDD]")
@@ -89,11 +100,12 @@ def main():
         }
 
         links = list(df['네이버링크'])
-        contents, jour_links, jour_names = process_links(links, headers)
+        contents, jour_links, jour_names, times = process_links(links, headers)
 
         df['본문'] = contents
         df['기자명'] = jour_names
         df['기자링크'] = jour_links
+        df['발행시각'] = times
         save_excel_file(df, date_str, file_prefix)
     else:
         print("데이터프레임을 가져올 수 없어서 프로세스를 중지합니다.")
